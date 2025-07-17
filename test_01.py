@@ -1,5 +1,6 @@
+import re
 import pytest
-
+import os
 from baseapp import BasePage
 from selenium import webdriver
 import time
@@ -18,6 +19,10 @@ class PageSaby(BasePage):
         '//li[@class="sbisru-Header__menu-item sbisru-Header__menu-item-1 mh-8  s-Grid--hide-sm"]'
         '//a[@class="sbisru-link sbis_ru-link"]/span'
     )
+    __locator_download_link: Final = (
+        'xpath',
+        '//li[contains(@class, "sbisru-Footer__list-item")]/a[contains(text(), "Скачать")]'
+    )
 
     def go(self) -> None:
         self.driver.get('https://saby.ru')
@@ -32,6 +37,11 @@ class PageSaby(BasePage):
         #
         elements = self.find_elements(*self.__locator_link)
         assert len(elements) == 1, 'Link "Ещё <N> офисов" not found or too many'
+        elements[0].click()
+
+    def go_download(self) -> None:
+        elements: List['WebElement'] = self.find_elements(*self.__locator_download_link)
+        assert len(elements) == 1, 'Download link not found or too many'
         elements[0].click()
 
 
@@ -99,7 +109,32 @@ class PageSabyContacts(BasePage):
 
 
 class PageSabyDownload(BasePage):
-    pass
+    __locator_download_btn = (
+        'xpath',
+        '//a[@class="sbis_ru-DownloadNew-loadLink__link js-link"][contains(text(), "Exe")]'
+    )
+
+    def download_exe(self, path: str) -> float:
+        """
+        return filesize
+        """
+        if os.path.exists(path):
+            os.remove(path)
+        elements: List['WebElement'] = self.find_elements(*self.__locator_download_btn)
+        assert len(elements) == 1, 'Download btn not found or too many'
+        elements[0].click()
+        #
+        # ждём скачивание
+        time.sleep(2)
+        #
+        text = elements[0].text.strip()
+        return float(re.findall(r'Exe (\S+) МБ', text)[0])
+
+    @staticmethod
+    def check_download(path: str, size: float) -> None:
+        assert os.path.exists(path), f'File not found {path}'
+        cur_size = os.path.getsize(path) / (1024 * 1024)
+        assert (cur_size - size) < 0.01, f'Sizes does not match: {cur_size} vs {size}'
 
 
 class PageTensor(BasePage):
@@ -152,6 +187,9 @@ class PageTensorAbout(BasePage):
             assert cur_size == photo_size, f'Do not match photo size: {cur_size} vs {photo_size}'
 
 
+# options = webdriver.ChromeOptions()
+# options.add_argument("download.default_directory=/home/z1/WORK/saby_test/")
+# chrome_driver = webdriver.Chrome(options=options)
 chrome_driver = webdriver.Chrome()
 
 
@@ -205,3 +243,8 @@ def test_2():
 def test_3():
     pageSaby = PageSaby(chrome_driver)
     pageSaby.go()
+    pageSaby.go_download()
+    pageSabyDownload = PageSabyDownload(chrome_driver)
+    path_to_file = '/home/z1/Загрузки/saby-setup-web.exe'
+    filesize = pageSabyDownload.download_exe(path=path_to_file)
+    pageSabyDownload.check_download(path=path_to_file, size=filesize)
