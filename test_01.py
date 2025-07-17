@@ -1,5 +1,5 @@
 import re
-import pytest
+# import pytest
 import os
 from baseapp import BasePage
 from selenium import webdriver
@@ -204,7 +204,7 @@ def clear_driver(f: Callable) -> Callable:
     return wrapper
 
 
-@pytest.mark.skip
+# @pytest.mark.skip
 @clear_driver
 def test_1():
     pageSaby = PageSaby(chrome_driver)
@@ -222,7 +222,7 @@ def test_1():
     pageTensorAbout.check_workblock()
 
 
-@pytest.mark.skip
+# @pytest.mark.skip
 @clear_driver
 def test_2():
     pageSaby = PageSaby(chrome_driver)
