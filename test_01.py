@@ -3,7 +3,7 @@ import pytest
 from baseapp import BasePage
 from selenium import webdriver
 import time
-from typing import Final, List, TYPE_CHECKING
+from typing import Any, Callable, Final, List, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from selenium.webdriver.remote.webelement import WebElement
 
@@ -40,6 +40,20 @@ class PageSabyContacts(BasePage):
         'xpath',
         '//a[@class="sbisru-Contacts__logo-tensor mb-12"]'
     )
+    __locator_geospan: Final = (
+        'xpath',
+        '//div[@class="sbis_ru-container sbisru-Contacts__relative"]'
+        '//span[@class="sbis_ru-Region-Chooser__text sbis_ru-link"]'
+    )
+    __locator_partners: Final = (
+        'xpath',
+        '//div[@name="viewContainer"]//div[@class="sbisru-Contacts-List__name sbisru-Contacts-List--ellipsis '
+        'sbisru-Contacts__text--md pb-4 pb-xm-12 pr-xm-32"]'
+    )
+    __locator_geoselect: Final = (
+        'xpath',
+        '//li[@class="sbis_ru-Region-Panel__item"]//span[contains(text(), "{0}")]'
+    )
 
     def check_page(self) -> None:
         assert self.driver.current_url.startswith('https://saby.ru/contacts'), f'Wrong url: {self.driver.current_url}'
@@ -49,7 +63,39 @@ class PageSabyContacts(BasePage):
         elements: List['WebElement'] = self.find_elements(*self.__locator_banner)
         assert len(elements) == 1, 'Banner not found or too many'
         elements[0].click()
-        chrome_driver.switch_to.window(chrome_driver.window_handles[-1])
+        self.driver.switch_to.window(self.driver.window_handles[-1])
+
+    def check_geo(self, address: str, url: Optional[str] = None, title: Optional[str] = None) -> None:
+        elements: List['WebElement'] = self.find_elements(*self.__locator_geospan)
+        assert len(elements) == 1, 'Geospan not found or too many'
+        elem_address = elements[0].text.strip()
+        assert elem_address == address, f'Address does not match {elem_address} vs {address}'
+        elements = self.find_elements(*self.__locator_partners)
+        assert elements, 'Partners not found'
+        if url:
+            assert url in self.driver.current_url, f'Wrong url: {self.driver.current_url} must contains {url}'
+        if title:
+            assert title in self.driver.title, f'Wrong title: {self.driver.title} must contains {title}'
+
+    def change_geo(self, address: str) -> None:
+        elements: List['WebElement'] = self.find_elements(*self.__locator_geospan)
+        assert len(elements) == 1, 'Geospan not found or too many'
+        elements[0].click()
+        elements = self.find_elements(
+            self.__locator_geoselect[0],
+            self.__locator_geoselect[1].format(address)
+        )
+        assert len(elements) == 1, f'Address not found or too many: {address}'
+        elements[0].click()
+        #
+        # задержка js
+        time.sleep(0.5)
+        #
+
+    def get_list_partners(self) -> List[str]:
+        elements: List['WebElement'] = self.find_elements(*self.__locator_partners)
+        assert elements, 'Partners not found'
+        return [element.text.strip() for element in elements]
 
 
 class PageSabyDownload(BasePage):
@@ -109,6 +155,19 @@ class PageTensorAbout(BasePage):
 chrome_driver = webdriver.Chrome()
 
 
+def clear_driver(f: Callable) -> Callable:
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        list_handles = chrome_driver.window_handles
+        while len(list_handles) > 1:
+            chrome_driver.close()
+            list_handles = chrome_driver.window_handles
+        chrome_driver.switch_to.window(list_handles[0])
+        return f(*args, **kwargs)
+    return wrapper
+
+
+@pytest.mark.skip
+@clear_driver
 def test_1():
     pageSaby = PageSaby(chrome_driver)
     pageSaby.go()
@@ -123,3 +182,26 @@ def test_1():
     pageTensorAbout = PageTensorAbout(chrome_driver)
     pageTensorAbout.check_page()
     pageTensorAbout.check_workblock()
+
+
+@pytest.mark.skip
+@clear_driver
+def test_2():
+    pageSaby = PageSaby(chrome_driver)
+    pageSaby.go()
+    pageSaby.go_contacts()
+    pageSabyContacts = PageSabyContacts(chrome_driver)
+    pageSabyContacts.check_page()
+    pageSabyContacts.check_geo(address='Костромская обл.')
+    prev_list_partners = pageSabyContacts.get_list_partners()
+    pageSabyContacts.change_geo('Камчатский')
+    pageSabyContacts.check_geo(address='Камчатский край', url='41-kamchatskij-kraj', title='Камчатский край')
+    cur_list_partners = pageSabyContacts.get_list_partners()
+    if cur_list_partners == prev_list_partners:
+        raise AssertionError(f'List partners does not changed: {cur_list_partners} vs {prev_list_partners}')
+
+
+@clear_driver
+def test_3():
+    pageSaby = PageSaby(chrome_driver)
+    pageSaby.go()
